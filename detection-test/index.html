@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CloakBrowser Detection Test</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1117;--surface:#1a1d27;--surface2:#242836;--border:#2e3348;--text:#e4e6f0;--text2:#8b8fa3;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--purple:#a855f7;--cyan:#06b6d4}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+.header{background:linear-gradient(135deg,#1a1d27 0%,#242836 100%);border-bottom:1px solid var(--border);padding:20px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header h1{font-size:20px;font-weight:700;display:flex;align-items:center;gap:10px}
+.header-right{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.score-ring{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;border:3px solid var(--border);position:relative;flex-shrink:0}
+.score-ring .label{font-size:8px;font-weight:500;position:absolute;bottom:5px;color:var(--text2)}
+.total-score{display:flex;align-items:center;gap:10px}
+.total-score .desc{font-size:12px;color:var(--text2);max-width:180px}
+.profile-input{display:flex;align-items:center;gap:8px}
+.profile-input label{font-size:12px;color:var(--text2);white-space:nowrap}
+.profile-input input{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;width:160px}
+.btn{padding:7px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-green{background:var(--green);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.container{max-width:1200px;margin:0 auto;padding:20px 32px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;margin-top:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.card-header{padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.card-header h3{font-size:13px;font-weight:600;display:flex;align-items:center;gap:7px}
+.badge{font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;white-space:nowrap}
+.badge-pass{background:rgba(34,197,94,.15);color:var(--green)}
+.badge-warn{background:rgba(245,158,11,.15);color:var(--yellow)}
+.badge-fail{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-info{background:rgba(59,130,246,.15);color:var(--blue)}
+.card-body{padding:12px 16px}
+.row{display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(46,51,72,.5)}
+.row:last-child{border-bottom:none}
+.row-key{font-size:12px;color:var(--text2);flex-shrink:0;max-width:45%}
+.row-val{font-size:12px;font-weight:500;text-align:right;word-break:break-all;max-width:55%}
+.row-val.pass{color:var(--green)}.row-val.warn{color:var(--yellow)}.row-val.fail{color:var(--red)}.row-val.info{color:var(--cyan)}
+.summary-bar{display:flex;gap:10px;margin-top:14px;padding:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;flex-wrap:wrap}
+.summary-item{flex:1;min-width:100px;text-align:center;padding:6px}
+.summary-item .num{font-size:24px;font-weight:700}
+.summary-item .lbl{font-size:10px;color:var(--text2);margin-top:2px}
+.detail-toggle{font-size:11px;color:var(--blue);cursor:pointer;padding:3px 0;user-select:none}
+.detail-toggle:hover{text-decoration:underline}
+.detail-content{display:none;font-size:11px;color:var(--text2);padding:6px 8px;word-break:break-all;max-height:100px;overflow:auto;background:var(--surface2);border-radius:5px;margin-top:3px}
+.detail-content.show{display:block}
+.loading{display:flex;align-items:center;gap:8px;color:var(--text2);font-size:13px;padding:20px}
+.spinner{width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.captcha-box{background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:14px;margin:6px 0}
+.captcha-box .title{font-size:12px;font-weight:600;margin-bottom:8px}
+.captcha-box .status{font-size:12px;margin-top:6px}
+.captcha-box .status.pass{color:var(--green)}
+.captcha-box .status.fail{color:var(--red)}
+.captcha-box .status.pending{color:var(--yellow)}
+.slider-track{width:100%;height:40px;background:var(--surface);border:1px solid var(--border);border-radius:20px;position:relative;overflow:hidden;margin-top:8px}
+.slider-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--cyan));border-radius:20px;width:0;transition:width .05s}
+.slider-thumb{width:40px;height:40px;background:var(--blue);border-radius:50%;position:absolute;top:0;cursor:grab;display:flex;align-items:center;justify-content:center;font-size:14px;color:#fff;z-index:2}
+.slider-label{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:12px;color:var(--text2);pointer-events:none}
+.click-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:8px}
+.click-cell{aspect-ratio:1;background:var(--surface);border:1px solid var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;cursor:pointer;transition:all .15s}
+.click-cell:hover{border-color:var(--blue)}
+.click-cell.done{background:rgba(34,197,94,.2);border-color:var(--green);color:var(--green)}
+.click-cell.wrong{background:rgba(239,68,68,.2);border-color:var(--red);color:var(--red)}
+.type-area{margin-top:8px}
+.type-area .prompt{font-size:20px;font-weight:700;letter-spacing:4px;color:var(--cyan);padding:8px 0;text-align:center}
+.type-area input{width:100%;background:var(--surface);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:14px;letter-spacing:2px;text-align:center}
+.type-area input:focus{outline:none;border-color:var(--blue)}
+.drag-zone{display:flex;gap:10px;margin-top:8px;flex-wrap:wrap}
+.drag-source{padding:8px 14px;background:var(--blue);color:#fff;border-radius:6px;cursor:grab;font-size:12px;font-weight:600}
+.drag-target{min-width:80px;min-height:40px;border:2px dashed var(--border);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text2);padding:8px}
+.drag-target.matched{border-color:var(--green);background:rgba(34,197,94,.1);color:var(--green)}
+.toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:8px;font-size:13px;font-weight:600;z-index:9999;animation:fadeIn .3s}
+.toast.success{background:var(--green);color:#fff}
+.toast.error{background:var(--red);color:#fff}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-10px)}to{opacity:1;transform:translateY(0)}}
+.footer{text-align:center;padding:24px;color:var(--text2);font-size:11px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>🛡️ CloakBrowser Detection Test</h1>
+  <div class="header-right">
+    <div class="profile-input">
+      <label>Profile 名称:</label>
+      <input type="text" id="profileName" placeholder="如: Profile-A (seed=12345)">
+    </div>
+    <div class="total-score">
+      <div class="score-ring" id="scoreRing">--<span class="label">SCORE</span></div>
+      <div class="desc" id="scoreDesc">Running tests...</div>
+    </div>
+    <button class="btn btn-green" id="btnSubmit" disabled onclick="submitResults()">提交结果</button>
+    <a href="results.html" class="btn btn-primary" style="text-decoration:none">查看对比</a>
+  </div>
+</div>
+<div class="container">
+  <div class="summary-bar" id="summaryBar">
+    <div class="summary-item"><div class="num" id="cntPass" style="color:var(--green)">-</div><div class="lbl">Passed</div></div>
+    <div class="summary-item"><div class="num" id="cntWarn" style="color:var(--yellow)">-</div><div class="lbl">Warning</div></div>
+    <div class="summary-item"><div class="num" id="cntFail" style="color:var(--red)">-</div><div class="lbl">Failed</div></div>
+    <div class="summary-item"><div class="num" id="cntInfo" style="color:var(--cyan)">-</div><div class="lbl">Info</div></div>
+  </div>
+  <div class="grid" id="results"></div>
+</div>
+<div class="footer">CloakBrowser Detection Test</div>
+<script>
+let allCategories=[];
+let captchaResults={};
+let interactionResults={};
+
+function escHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+function simpleHash(str){
+  let h=0x811c9dc5;
+  for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=Math.imul(h,0x01000193);}
+  return('00000000'+(h>>>0).toString(16)).slice(-8);
+}
+
+async function sha256(str){
+  try{
+    if(crypto&&crypto.subtle&&typeof crypto.subtle.digest==='function'){
+      const buf=new TextEncoder().encode(str);
+      const hash=await crypto.subtle.digest('SHA-256',buf);
+      return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join('');
+    }
+  }catch(e){}
+  return 'fnv1a-'+simpleHash(str)+'-'+simpleHash(str.split('').reverse().join(''))+'-'+simpleHash(str+str);
+}
+
+function showToast(msg,type){const t=document.createElement('div');t.className='toast '+type;t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3000)}
+
+function saveToLocal(record){
+  try{
+    let data=JSON.parse(localStorage.getItem('cb_detection_results')||'[]');
+    data.push(record);
+    localStorage.setItem('cb_detection_results',JSON.stringify(data));
+    return true;
+  }catch(e){return false;}
+}
+
+async function runAll(){
+  const r=document.getElementById('results');
+  r.innerHTML='<div class="loading"><div class="spinner"></div>Running all detection tests...</div>';
+  await testAutomation();
+  await testCanvas();
+  await testWebGL();
+  await testAudio();
+  await testFonts();
+  await testHardware();
+  await testNetwork();
+  await testIPGeo();
+  await testBrowser();
+  await testStorage();
+  await testAdvanced();
+  await testCaptcha();
+  await testInteraction();
+  renderResults();
+}
+
+function renderResults(){
+  const r=document.getElementById('results');r.innerHTML='';
+  let cntP=0,cntW=0,cntF=0,cntI=0;
+  allCategories.forEach(g=>g.items.forEach(i=>{if(i.cls==='pass')cntP++;else if(i.cls==='warn')cntW++;else if(i.cls==='fail')cntF++;else cntI++;}));
+  document.getElementById('cntPass').textContent=cntP;
+  document.getElementById('cntWarn').textContent=cntW;
+  document.getElementById('cntFail').textContent=cntF;
+  document.getElementById('cntInfo').textContent=cntI;
+  const total=cntP+cntW+cntF;const score=total?Math.round(cntP/total*100):0;
+  const ring=document.getElementById('scoreRing');
+  ring.innerHTML=score+'<span class="label">SCORE</span>';
+  ring.style.borderColor=score>=80?'var(--green)':score>=50?'var(--yellow)':'var(--red)';
+  ring.style.color=score>=80?'var(--green)':score>=50?'var(--yellow)':'var(--red)';
+  document.getElementById('scoreDesc').textContent=score>=80?'Stealth is good':score>=50?'Some signals exposed':'Multiple signals exposed';
+  document.getElementById('btnSubmit').disabled=false;
+  allCategories.forEach(g=>{
+    const passC=g.items.filter(i=>i.cls==='pass').length;
+    const failC=g.items.filter(i=>i.cls==='fail').length;
+    const warnC=g.items.filter(i=>i.cls==='warn').length;
+    const badgeCls=failC>0?'badge-fail':warnC>0?'badge-warn':'badge-pass';
+    const badgeText=failC>0?failC+' failed':(warnC>0?warnC+' warnings':'All passed');
+    const card=document.createElement('div');card.className='card';
+    let bodyHTML='';
+    g.items.forEach(item=>{
+      const detailTag=item.detail?`<div class="detail-toggle" onclick="this.nextElementSibling.classList.toggle('show')">Show detail</div><div class="detail-content">${escHtml(item.detail)}</div>`:'';
+      bodyHTML+=`<div class="row"><span class="row-key">${escHtml(item.key)}</span><span class="row-val ${item.cls}">${escHtml(item.val)}</span></div>${detailTag}`;
+    });
+    card.innerHTML=`<div class="card-header"><h3>${g.icon} ${escHtml(g.category)}</h3><span class="badge ${badgeCls}">${badgeText}</span></div><div class="card-body">${bodyHTML}</div>`;
+    r.appendChild(card);
+  });
+}
+
+function submitResults(){
+  const btn=document.getElementById('btnSubmit');
+  btn.disabled=true;btn.textContent='Saving...';
+  const profileName=document.getElementById('profileName').value||'Unnamed Profile';
+  const cntP=allCategories.reduce((s,g)=>s+g.items.filter(i=>i.cls==='pass').length,0);
+  const cntW=allCategories.reduce((s,g)=>s+g.items.filter(i=>i.cls==='warn').length,0);
+  const cntF=allCategories.reduce((s,g)=>s+g.items.filter(i=>i.cls==='fail').length,0);
+  const total=cntP+cntW+cntF;const score=total?Math.round(cntP/total*100):0;
+  const record={
+    id:Date.now().toString(36)+Math.random().toString(36).substring(2,6),
+    timestamp:new Date().toISOString(),
+    profile_name:profileName,
+    score:score,
+    summary:{pass:cntP,warn:cntW,fail:cntF},
+    categories:allCategories.map(g=>({category:g.category,items:g.items})),
+    captcha_results:captchaResults,
+    interaction_results:interactionResults
+  };
+  if(saveToLocal(record)){
+    showToast('结果已保存！可在"查看对比"中查看','success');
+  }else{
+    showToast('保存失败：localStorage 不可用','error');
+  }
+  btn.disabled=false;btn.textContent='提交结果';
+}
+
+async function testAutomation(){
+  const items=[];
+  const wd=navigator.webdriver;
+  items.push({key:'navigator.webdriver',val:wd===true?'true (DETECTED)':wd===false?'false':'undefined',cls:wd===true?'fail':wd===undefined?'pass':'warn',detail:typeof navigator.webdriver+' = '+String(navigator.webdriver)});
+  const cdpTests=[];
+  try{const r=await fetch('http://localhost:9222/json/version',{signal:AbortSignal.timeout(1000)});if(r.ok)cdpTests.push('Port 9222')}catch(e){}
+  try{const r=await fetch('http://localhost:9223/json/version',{signal:AbortSignal.timeout(1000)});if(r.ok)cdpTests.push('Port 9223')}catch(e){}
+  items.push({key:'CDP Debug Port',val:cdpTests.length?cdpTests.join(', '):'Not detected',cls:cdpTests.length?'warn':'pass'});
+  const autoFlags=[];
+  if(window.cdc_adoQpoasnfa76pfcZLmcfl_Array)autoFlags.push('ChromeDriver');
+  if(window.__nightmare)autoFlags.push('Nightmare');
+  if(window._phantom||window.callPhantom)autoFlags.push('PhantomJS');
+  if(window.__selenium_unwrapped||window.__webdriver_evaluate)autoFlags.push('Selenium');
+  if(window.__playwright)autoFlags.push('Playwright');
+  if(window.__puppeteer_evaluation_script__)autoFlags.push('Puppeteer');
+  items.push({key:'Automation Frameworks',val:autoFlags.length?autoFlags.join(', '):'None detected',cls:autoFlags.length?'fail':'pass'});
+  const chromeObj=!!window.chrome;const chromeRuntime=!!(window.chrome&&window.chrome.runtime);
+  items.push({key:'window.chrome',val:chromeObj?'Present':'Missing',cls:chromeObj?'pass':'warn'});
+  items.push({key:'chrome.runtime',val:chromeRuntime?'Present':'Missing',cls:chromeRuntime?'pass':'warn',detail:'Missing may indicate headless mode'});
+  try{const perms=await navigator.permissions.query({name:'notifications'});items.push({key:'Notification Permission',val:String(perms.state),cls:perms.state==='denied'?'warn':'pass',detail:'Headless auto-denies notifications'});}catch(e){items.push({key:'Notification Permission',val:'N/A',cls:'info'});}
+  allCategories.push({category:'Automation Detection',icon:'🤖',items});
+}
+
+async function testCanvas(){
+  const items=[];
+  try{
+    const c=document.createElement('canvas');c.width=280;c.height=60;const ctx=c.getContext('2d');
+    ctx.textBaseline='top';ctx.font='14px Arial';ctx.fillStyle='#f60';ctx.fillRect(0,0,280,60);
+    ctx.fillStyle='#069';ctx.fillText('C4nvas_F1ngerpr1nt_T3st!',2,15);
+    ctx.fillStyle='rgba(102,204,0,0.7)';ctx.fillText('C4nvas_F1ngerpr1nt_T3st!',4,17);
+    ctx.globalCompositeOperation='multiply';ctx.fillStyle='rgb(255,0,255)';ctx.beginPath();ctx.arc(50,50,50,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgb(0,255,255)';ctx.beginPath();ctx.arc(100,50,50,0,Math.PI*2);ctx.fill();
+    const data=c.toDataURL();const hash=await sha256(data);
+    items.push({key:'Canvas Hash',val:hash.substring(0,16)+'...',cls:'info',detail:'Full: '+hash+'\nData length: '+data.length});
+    items.push({key:'Canvas Supported',val:'Yes',cls:'pass'});
+  }catch(e){items.push({key:'Canvas',val:'Error: '+e.message,cls:'fail'});}
+  allCategories.push({category:'Canvas Fingerprint',icon:'🎨',items});
+}
+
+async function testWebGL(){
+  const items=[];
+  try{
+    const c=document.createElement('canvas');const gl=c.getContext('webgl')||c.getContext('experimental-webgl');
+    if(!gl){items.push({key:'WebGL',val:'Not supported',cls:'warn'});allCategories.push({category:'WebGL Fingerprint',icon:'🖥️',items});return;}
+    const dbg=gl.getExtension('WEBGL_debug_renderer_info');
+    const vendor=dbg?gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL):gl.getParameter(gl.VENDOR);
+    const renderer=dbg?gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL):gl.getParameter(gl.RENDERER);
+    items.push({key:'GPU Vendor',val:vendor,cls:vendor.includes('SwiftShader')?'fail':'pass'});
+    items.push({key:'GPU Renderer',val:renderer,cls:renderer.includes('SwiftShader')?'fail':'pass',detail:renderer});
+    items.push({key:'WebGL Version',val:gl.getParameter(gl.VERSION),cls:'info'});
+    items.push({key:'Max Texture Size',val:String(gl.getParameter(gl.MAX_TEXTURE_SIZE)),cls:'info'});
+    const exts=gl.getSupportedExtensions()||[];
+    items.push({key:'Extensions Count',val:String(exts.length),cls:'info',detail:exts.join('\n')});
+    const isSoftware=renderer.toLowerCase().includes('swiftshader')||renderer.toLowerCase().includes('llvmpipe')||renderer.toLowerCase().includes('software');
+    items.push({key:'Rendering Mode',val:isSoftware?'Software (SUSPICIOUS)':'Hardware',cls:isSoftware?'fail':'pass'});
+  }catch(e){items.push({key:'WebGL',val:'Error: '+e.message,cls:'fail'});}
+  allCategories.push({category:'WebGL Fingerprint',icon:'🖥️',items});
+}
+
+async function testAudio(){
+  const items=[];
+  try{
+    const ctx=new(window.AudioContext||window.webkitAudioContext)();
+    const osc=ctx.createOscillator();const ana=ctx.createAnalyser();const comp=ctx.createDynamicsCompressor();const gain=ctx.createGain();
+    osc.type='triangle';osc.frequency.setValueAtTime(10000,ctx.currentTime);
+    gain.gain.setValueAtTime(0,ctx.currentTime);gain.gain.linearRampToValueAtTime(1,ctx.currentTime+0.1);
+    osc.connect(comp);comp.connect(gain);gain.connect(ana);ana.connect(ctx.destination);osc.start(0);
+    const buf=new Float32Array(ana.frequencyBinCount);ana.getFloatFrequencyData(buf);
+    const hash=await sha256(buf.toString());
+    items.push({key:'Audio Hash',val:hash.substring(0,16)+'...',cls:'info',detail:'Full: '+hash});
+    items.push({key:'Sample Rate',val:String(ctx.sampleRate)+' Hz',cls:'info'});
+    items.push({key:'AudioContext',val:'Supported',cls:'pass'});
+    osc.stop();ctx.close();
+  }catch(e){items.push({key:'AudioContext',val:'Error: '+e.message,cls:'warn'});}
+  allCategories.push({category:'Audio Fingerprint',icon:'🔊',items});
+}
+
+async function testFonts(){
+  const items=[];
+  const testFonts=['Arial','Arial Black','Comic Sans MS','Courier New','Georgia','Impact','Times New Roman','Trebuchet MS','Verdana','Calibri','Cambria','Consolas','Segoe UI','Helvetica','Monaco','SimSun','Microsoft YaHei','PingFang SC','Hiragino Sans','MS Gothic'];
+  const baseFonts=['monospace','sans-serif','serif'];
+  const s=document.createElement('span');s.style.cssText='position:absolute;left:-9999px;font-size:72px;line-height:normal;';s.textContent='mmmmmmmmmmlli';document.body.appendChild(s);
+  const baseWidths={};baseFonts.forEach(f=>{s.style.fontFamily=f;baseWidths[f]=s.offsetWidth;});
+  const detected=[];
+  testFonts.forEach(f=>{baseFonts.forEach(bf=>{s.style.fontFamily=`"${f}",${bf}`;if(s.offsetWidth!==baseWidths[bf]&&!detected.includes(f))detected.push(f);});});
+  document.body.removeChild(s);
+  items.push({key:'Detected Fonts',val:String(detected.length),cls:'info',detail:detected.join(', ')});
+  items.push({key:'Font List',val:detected.slice(0,6).join(', ')+(detected.length>6?'...':''),cls:'info'});
+  allCategories.push({category:'Font Detection',icon:'🔤',items});
+}
+
+async function testHardware(){
+  const items=[];
+  items.push({key:'Hardware Concurrency',val:String(navigator.hardwareConcurrency||'N/A'),cls:'info'});
+  items.push({key:'Device Memory',val:navigator.deviceMemory?navigator.deviceMemory+' GB':'N/A',cls:'info'});
+  items.push({key:'Screen Resolution',val:`${screen.width} × ${screen.height}`,cls:'info'});
+  items.push({key:'Available Screen',val:`${screen.availWidth} × ${screen.availHeight}`,cls:'info'});
+  items.push({key:'Color Depth',val:String(screen.colorDepth)+' bit',cls:'info'});
+  items.push({key:'Pixel Ratio',val:String(window.devicePixelRatio),cls:'info'});
+  items.push({key:'Viewport',val:`${window.innerWidth} × ${window.innerHeight}`,cls:'info'});
+  items.push({key:'Touch Support',val:'ontouchstart'in window?'Yes':'No',cls:'info'});
+  items.push({key:'Max Touch Points',val:String(navigator.maxTouchPoints||0),cls:'info'});
+  try{const conn=navigator.connection;if(conn)items.push({key:'Network Type',val:conn.effectiveType||'N/A',cls:'info'});}catch(e){}
+  allCategories.push({category:'Hardware & Device',icon:'💻',items});
+}
+
+async function testNetwork(){
+  const items=[];
+  items.push({key:'Timezone',val:Intl.DateTimeFormat().resolvedOptions().timeZone,cls:'info'});
+  items.push({key:'UTC Offset',val:String(new Date().getTimezoneOffset())+' min',cls:'info'});
+  items.push({key:'Language',val:navigator.language,cls:'info'});
+  items.push({key:'Languages',val:String(navigator.languages||[navigator.language]),cls:'info',detail:String(navigator.languages)});
+  items.push({key:'User Agent',val:navigator.userAgent.substring(0,50)+'...',cls:'info',detail:navigator.userAgent});
+  const uaLC=navigator.userAgent.toLowerCase();
+  const uaPlatform=uaLC.includes('win')?'Windows':uaLC.includes('mac')?'macOS':uaLC.includes('linux')?'Linux':'Unknown';
+  items.push({key:'UA Platform',val:uaPlatform,cls:'info'});
+  items.push({key:'navigator.platform',val:navigator.platform,cls:'info'});
+  const platformMatch=(uaPlatform==='Windows'&&navigator.platform.startsWith('Win'))||(uaPlatform==='macOS'&&navigator.platform.startsWith('Mac'))||(uaPlatform==='Linux'&&navigator.platform.startsWith('Linux'));
+  items.push({key:'UA/Platform Consistency',val:platformMatch?'Consistent':'MISMATCH',cls:platformMatch?'pass':'fail',detail:'UA: '+uaPlatform+' | platform: '+navigator.platform});
+  try{
+    const rtc=new RTCPeerConnection({iceServers:[{urls:'stun:stun.l.google.com:19302'}]});
+    const ips=new Set();rtc.createDataChannel('');
+    const offer=await rtc.createOffer();await rtc.setLocalDescription(offer);
+    await new Promise(r=>{rtc.onicecandidate=e=>{if(!e.candidate||e.candidate.candidate==='')r();else{const m=e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);if(m)ips.add(m[1]);}};setTimeout(r,3000);});
+    rtc.close();const ipList=[...ips];
+    items.push({key:'WebRTC Local IPs',val:ipList.length?ipList.join(', '):'None detected',cls:ipList.length?'warn':'pass',detail:ipList.length?'Leaked IPs:\n'+ipList.join('\n'):'WebRTC leak blocked'});
+  }catch(e){items.push({key:'WebRTC',val:'Not supported or blocked',cls:'pass'});}
+  allCategories.push({category:'Network & Identity',icon:'🌐',items});
+}
+
+async function testIPGeo(){
+  const items=[];
+  const apis=[
+    {url:'https://ipapi.co/json/',parse:d=>({ip:d.ip,country:d.country_name,region:d.region,city:d.city,isp:d.org,tz:d.timezone,cc:d.country_code})},
+    {url:'https://ipwho.is/',parse:d=>({ip:d.ip,country:d.country,region:d.region,city:d.city,isp:d.connection?.isp,tz:d.timezone?.id,cc:d.country_code})},
+    {url:'https://freeipapi.com/api/json',parse:d=>({ip:d.ipAddress,country:d.countryName,region:d.regionName,city:d.cityName,isp:d.isp,tz:d.timeZone,cc:d.countryCode})},
+    {url:'https://api.ipbase.com/v1/json/',parse:d=>({ip:d.ip,country:d.country_name,region:d.region_name,city:d.city,isp:d.connection?.isp,tz:d.timezone,cc:d.country_code})},
+    {url:'https://api.ipify.org?format=json',parse:d=>({ip:d.ip,country:'N/A',region:'N/A',city:'N/A',isp:'N/A',tz:null,cc:null})},
+  ];
+  let geo=null;let lastErr='';
+  for(const api of apis){
+    try{
+      const resp=await fetch(api.url,{signal:AbortSignal.timeout(8000)});
+      if(!resp.ok){lastErr=api.url+' → HTTP '+resp.status;continue;}
+      const raw=await resp.json();
+      const d=api.parse(raw);
+      if(d&&d.ip){geo=d;break;}
+      lastErr=api.url+' → no data';
+    }catch(e){lastErr=api.url+' → '+e.message;continue;}
+  }
+  if(geo){
+    items.push({key:'Public IP',val:geo.ip||'N/A',cls:'info'});
+    items.push({key:'Country / Region',val:(geo.country||'N/A')+' / '+(geo.region||'N/A'),cls:'info'});
+    items.push({key:'City',val:geo.city||'N/A',cls:'info'});
+    items.push({key:'ISP',val:geo.isp||'N/A',cls:'info'});
+    items.push({key:'IP Timezone',val:geo.tz||'N/A',cls:'info'});
+    const browserTZ=Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tzMatch=!geo.tz||geo.tz===browserTZ;
+    items.push({key:'IP/Browser Timezone Match',val:tzMatch?'Consistent':'MISMATCH',cls:tzMatch?'pass':'warn',detail:'IP timezone: '+(geo.tz||'N/A')+'\nBrowser timezone: '+browserTZ});
+    const browserLang=navigator.language;
+    const countryLangs={'US':'en','GB':'en','CN':'zh','JP':'ja','KR':'ko','DE':'de','FR':'fr','RU':'ru','AU':'en','CA':'en','BR':'pt','IN':'en','SG':'en','HK':'zh','TW':'zh'};
+    const expectedLang=countryLangs[geo.cc]||'';
+    const langMatch=!expectedLang||browserLang.startsWith(expectedLang);
+    items.push({key:'IP/Language Match',val:langMatch?'Consistent':'MISMATCH',cls:langMatch?'pass':'warn',detail:'IP country: '+(geo.cc||'N/A')+' → expected lang: '+(expectedLang||'any')+'\nBrowser lang: '+browserLang});
+  }else{
+    items.push({key:'IP Geolocation',val:'All APIs unavailable',cls:'warn',detail:'Tried 5 APIs, all failed.\nLast error: '+lastErr+'\n\nPossible causes:\n1. Server firewall blocks outbound HTTPS\n2. No internet access from browser\n3. DNS resolution failed'});
+  }
+  allCategories.push({category:'IP Geolocation',icon:'🌍',items});
+}
+
+async function testBrowser(){
+  const items=[];
+  items.push({key:'Cookies Enabled',val:navigator.cookieEnabled?'Yes':'No',cls:navigator.cookieEnabled?'pass':'warn'});
+  items.push({key:'Plugins Count',val:String(navigator.plugins?navigator.plugins.length:0),cls:navigator.plugins&&navigator.plugins.length===0?'warn':'info'});
+  try{const b=await navigator.getBattery();items.push({key:'Battery Level',val:Math.round(b.level*100)+'%',cls:'info'});items.push({key:'Battery Charging',val:String(b.charging),cls:'info'});}catch(e){items.push({key:'Battery API',val:'Not supported',cls:'info'});}
+  items.push({key:'Web Workers',val:typeof Worker!=='undefined'?'Supported':'No',cls:'info'});
+  items.push({key:'Service Workers',val:'serviceWorker'in navigator?'Supported':'No',cls:'info'});
+  items.push({key:'WebAssembly',val:typeof WebAssembly!=='undefined'?'Supported':'No',cls:'info'});
+  const speechSynth=window.speechSynthesis;
+  if(speechSynth){items.push({key:'Voices Count',val:String(speechSynth.getVoices().length),cls:'info'});}
+  allCategories.push({category:'Browser Features',icon:'🔍',items});
+}
+
+async function testStorage(){
+  const items=[];
+  try{localStorage.setItem('__cb','1');localStorage.removeItem('__cb');items.push({key:'localStorage',val:'Available',cls:'pass'});}catch(e){items.push({key:'localStorage',val:'Blocked',cls:'fail'});}
+  try{sessionStorage.setItem('__cb','1');sessionStorage.removeItem('__cb');items.push({key:'sessionStorage',val:'Available',cls:'pass'});}catch(e){items.push({key:'sessionStorage',val:'Blocked',cls:'fail'});}
+  try{indexedDB.open('__cb');items.push({key:'IndexedDB',val:'Available',cls:'pass'});}catch(e){items.push({key:'IndexedDB',val:'Blocked',cls:'fail'});}
+  allCategories.push({category:'Storage & Persistence',icon:'💾',items});
+}
+
+async function testAdvanced(){
+  const items=[];
+  try{
+    const el=document.createElement('div');el.innerHTML='test';el.style.cssText='position:absolute;left:-9999px;font-size:72px;';
+    document.body.appendChild(el);
+    const rects=el.getClientRects();
+    if(rects&&rects.length>0){
+      const r0=rects[0];
+      const hash=await sha256(JSON.stringify({top:r0.top,left:r0.left,width:r0.width,height:r0.height}));
+      items.push({key:'ClientRects Hash',val:hash.substring(0,16)+'...',cls:'info',detail:'Full: '+hash});
+    }else{
+      items.push({key:'ClientRects',val:'No rects returned',cls:'warn'});
+    }
+    document.body.removeChild(el);
+  }catch(e){items.push({key:'ClientRects',val:'Error: '+e.message,cls:'warn'});}
+  const mq=[];if(window.matchMedia('(prefers-color-scheme: dark)').matches)mq.push('dark');if(window.matchMedia('(prefers-reduced-motion: reduce)').matches)mq.push('reduced-motion');
+  items.push({key:'CSS Media Queries',val:mq.length?mq.join(', '):'Default',cls:'info'});
+  items.push({key:'Error Stack Trace',val:(()=>{try{throw new Error('_cb_');}catch(e){return e.stack&&e.stack.includes('_cb_')?'Available':'N/A';}})(),cls:'info'});
+  allCategories.push({category:'Advanced Detection',icon:'🔬',items});
+}
+
+async function testCaptcha(){
+  const items=[];
+  items.push({key:'reCAPTCHA v3',val:'Loading...',cls:'info',id:'recaptcha'});
+  items.push({key:'hCaptcha',val:'Loading...',cls:'info',id:'hcaptcha'});
+  items.push({key:'Cloudflare Turnstile',val:'Loading...',cls:'info',id:'turnstile'});
+  allCategories.push({category:'CAPTCHA Tests',icon:'🔐',items});
+
+  try{
+    const script=document.createElement('script');
+    script.src='https://www.google.com/recaptcha/api.js?render=6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI';
+    script.onload=()=>{
+      setTimeout(()=>{
+        try{
+          if(typeof grecaptcha!=='undefined'&&grecaptcha.execute){
+            grecaptcha.ready(async()=>{
+              try{
+                const token=await grecaptcha.execute('6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',{action:'detect_test'});
+                updateItem('recaptcha','Token received (test key)',token?'pass':'fail','Token: '+token.substring(0,30)+'...');
+                captchaResults.recaptcha={status:token?'pass':'fail',detail:'Token: '+(token?token.substring(0,30)+'...':'none')};
+              }catch(e){
+                updateItem('recaptcha','Execute failed: '+e.message,'warn');
+                captchaResults.recaptcha={status:'warn',detail:e.message};
+              }
+            });
+          }else{
+            updateItem('recaptcha','SDK loaded but execute unavailable','warn');
+            captchaResults.recaptcha={status:'warn',detail:'SDK loaded but no execute'};
+          }
+        }catch(e){
+          updateItem('recaptcha','Error: '+e.message,'fail');
+          captchaResults.recaptcha={status:'fail',detail:e.message};
+        }
+      },1500);
+    };
+    script.onerror=()=>{
+      updateItem('recaptcha','Script blocked (network/GFW)','warn');
+      captchaResults.recaptcha={status:'warn',detail:'Script blocked - may be network restriction or GFW'};
+    };
+    document.head.appendChild(script);
+  }catch(e){
+    updateItem('recaptcha','Error: '+e.message,'fail');
+    captchaResults.recaptcha={status:'fail',detail:e.message};
+  }
+
+  try{
+    const script=document.createElement('script');
+    script.src='https://js.hcaptcha.com/1/api.js';
+    script.onload=()=>{
+      setTimeout(()=>{
+        try{
+          if(typeof hcaptcha!=='undefined'){
+            updateItem('hcaptcha','SDK loaded','pass');
+            captchaResults.hcaptcha={status:'pass',detail:'SDK loaded'};
+          }else{
+            updateItem('hcaptcha','SDK not available','warn');
+            captchaResults.hcaptcha={status:'warn',detail:'SDK not available'};
+          }
+        }catch(e){updateItem('hcaptcha','Error: '+e.message,'fail');captchaResults.hcaptcha={status:'fail',detail:e.message};}
+      },2000);
+    };
+    script.onerror=()=>{updateItem('hcaptcha','Script blocked','warn');captchaResults.hcaptcha={status:'warn',detail:'Script blocked'};};
+    document.head.appendChild(script);
+  }catch(e){updateItem('hcaptcha','Error: '+e.message,'fail');captchaResults.hcaptcha={status:'fail',detail:e.message};}
+
+  try{
+    const script=document.createElement('script');
+    script.src='https://challenges.cloudflare.com/turnstile/v0/api.js';
+    script.onload=()=>{
+      setTimeout(()=>{
+        try{
+          if(typeof turnstile!=='undefined'){
+            updateItem('turnstile','SDK loaded','pass');
+            captchaResults.turnstile={status:'pass',detail:'SDK loaded'};
+          }else{
+            updateItem('turnstile','SDK not available','warn');
+            captchaResults.turnstile={status:'warn',detail:'SDK not available'};
+          }
+        }catch(e){updateItem('turnstile','Error: '+e.message,'fail');captchaResults.turnstile={status:'fail',detail:e.message};}
+      },2000);
+    };
+    script.onerror=()=>{updateItem('turnstile','Script blocked','warn');captchaResults.turnstile={status:'warn',detail:'Script blocked'};};
+    document.head.appendChild(script);
+  }catch(e){updateItem('turnstile','Error: '+e.message,'fail');captchaResults.turnstile={status:'fail',detail:e.message};}
+}
+
+function updateItem(id,val,cls,detail){
+  allCategories.forEach(g=>{g.items.forEach(i=>{if(i.id===id){i.val=val;i.cls=cls;if(detail)i.detail=detail;}});});
+  renderResults();
+}
+
+async function testInteraction(){
+  const items=[];
+  items.push({key:'Slider Verification',val:'⏳ Pending interaction',cls:'info',id:'slider'});
+  items.push({key:'Click Sequence',val:'⏳ Pending interaction',cls:'info',id:'clickseq'});
+  items.push({key:'Typing Test',val:'⏳ Pending interaction',cls:'info',id:'typing'});
+  items.push({key:'Drag & Drop',val:'⏳ Pending interaction',cls:'info',id:'dragdrop'});
+  allCategories.push({category:'Human Interaction',icon:'👤',items});
+  renderResults();
+  buildInteractionUI();
+}
+
+function buildInteractionUI(){
+  const r=document.getElementById('results');
+  const cards=r.querySelectorAll('.card');
+  let interactionCard=null;
+  cards.forEach(c=>{if(c.querySelector('h3')&&c.querySelector('h3').textContent.includes('Human Interaction'))interactionCard=c;});
+  if(!interactionCard)return;
+  const body=interactionCard.querySelector('.card-body');
+
+  const sliderBox=document.createElement('div');sliderBox.className='captcha-box';
+  sliderBox.innerHTML=`<div class="title">🧩 Slider Verification</div><div style="font-size:11px;color:var(--text2);margin-bottom:6px">Drag the slider to the target position</div><div class="slider-track" id="sliderTrack"><div class="slider-fill" id="sliderFill"></div><div class="slider-thumb" id="sliderThumb">→</div><div class="slider-label" id="sliderLabel">Drag to →</div></div><div class="status pending" id="sliderStatus">Waiting...</div>`;
+  body.appendChild(sliderBox);
+
+  const clickBox=document.createElement('div');clickBox.className='captcha-box';
+  const nums=shuffle([1,2,3,4,5,6,7,8,9]);
+  clickBox.innerHTML=`<div class="title">🔢 Click Sequence</div><div style="font-size:11px;color:var(--text2);margin-bottom:6px">Click numbers 1-9 in ascending order</div><div class="click-grid" id="clickGrid">${nums.map(n=>`<div class="click-cell" data-num="${n}">${n}</div>`).join('')}</div><div class="status pending" id="clickStatus">Waiting...</div>`;
+  body.appendChild(clickBox);
+
+  const typeBox=document.createElement('div');typeBox.className='captcha-box';
+  const words=['BROWSER','CLOAKTEST','FINGERPRINT','STEALTH','DETECTION'];
+  const word=words[Math.floor(Math.random()*words.length)];
+  typeBox.innerHTML=`<div class="title">⌨️ Typing Test</div><div style="font-size:11px;color:var(--text2);margin-bottom:6px">Type the text shown below</div><div class="type-area"><div class="prompt" id="typePrompt">${word}</div><input type="text" id="typeInput" placeholder="Type here..." autocomplete="off" spellcheck="false"></div><div class="status pending" id="typeStatus">Waiting...</div>`;
+  body.appendChild(typeBox);
+
+  const dragBox=document.createElement('div');dragBox.className='captcha-box';
+  dragBox.innerHTML=`<div class="title">🎯 Drag & Drop</div><div style="font-size:11px;color:var(--text2);margin-bottom:6px">Drag each label to its matching target</div><div class="drag-zone" id="dragZone"><div class="drag-source" draggable="true" data-id="a">🍎 Apple</div><div class="drag-source" draggable="true" data-id="b">🍌 Banana</div><div class="drag-source" draggable="true" data-id="c">🍇 Grape</div></div><div class="drag-zone" id="dropZone" style="margin-top:8px"><div class="drag-target" data-accept="b">Drop Banana here</div><div class="drag-target" data-accept="a">Drop Apple here</div><div class="drag-target" data-accept="c">Drop Grape here</div></div><div class="status pending" id="dragStatus">Waiting...</div>`;
+  body.appendChild(dragBox);
+
+  initSlider();initClickSequence();initTypingTest(word);initDragDrop();
+}
+
+function shuffle(arr){const a=[...arr];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+
+function initSlider(){
+  const track=document.getElementById('sliderTrack');const thumb=document.getElementById('sliderThumb');const fill=document.getElementById('sliderFill');const label=document.getElementById('sliderLabel');const status=document.getElementById('sliderStatus');
+  if(!track)return;
+  let dragging=false;let startTime=0;let moveEvents=[];
+  const targetPct=70+Math.floor(Math.random()*15);
+  thumb.addEventListener('mousedown',e=>{dragging=true;startTime=Date.now();moveEvents=[];e.preventDefault();});
+  thumb.addEventListener('touchstart',e=>{dragging=true;startTime=Date.now();moveEvents=[];e.preventDefault();},{passive:false});
+  const onMove=(clientX)=>{if(!dragging)return;const rect=track.getBoundingClientRect();const pct=Math.max(0,Math.min(100,((clientX-rect.left)/rect.width)*100));fill.style.width=pct+'%';thumb.style.left=(pct-7)+'%';moveEvents.push({t:Date.now()-startTime,x:clientX});};
+  document.addEventListener('mousemove',e=>onMove(e.clientX));document.addEventListener('touchmove',e=>onMove(e.touches[0].clientX));
+  const onEnd=()=>{if(!dragging)return;dragging=false;const pct=parseFloat(fill.style.width)||0;const elapsed=Date.now()-startTime;const isHuman=moveEvents.length>5&&elapsed>300;if(pct>=targetPct-5&&pct<=targetPct+5){status.textContent=isHuman?'✅ Passed (human-like)':'⚠️ Passed but robotic';status.className='status '+(isHuman?'pass':'warn');updateItem('slider',isHuman?'Passed (human-like)':'Passed (robotic)',isHuman?'pass':'warn','Events: '+moveEvents.length+', Time: '+elapsed+'ms');interactionResults.slider={status:isHuman?'pass':'warn',events:moveEvents.length,time:elapsed};}else{status.textContent='❌ Did not reach target ('+Math.round(pct)+'% / '+targetPct+'%)';status.className='status fail';updateItem('slider','Failed','fail');interactionResults.slider={status:'fail'};}};
+  document.addEventListener('mouseup',onEnd);document.addEventListener('touchend',onEnd);
+  label.textContent='Drag → '+targetPct+'%';
+}
+
+function initClickSequence(){
+  const grid=document.getElementById('clickGrid');const status=document.getElementById('clickStatus');
+  if(!grid)return;let next=1;let startTime=0;let clickTimes=[];
+  grid.querySelectorAll('.click-cell').forEach(cell=>{cell.addEventListener('click',()=>{if(next===1)startTime=Date.now();const num=parseInt(cell.dataset.num);if(num===next){cell.classList.add('done');clickTimes.push(Date.now()-startTime);next++;if(next>9){const totalTime=Date.now()-startTime;const avgInterval=clickTimes.length>1?clickTimes.reduce((a,b)=>a+b,0)/clickTimes.length:0;const isHuman=avgInterval>200&&totalTime>2000;status.textContent=isHuman?'✅ Passed (human-like)':'⚠️ Passed but robotic';status.className='status '+(isHuman?'pass':'warn');updateItem('clickseq',isHuman?'Passed (human-like)':'Passed (robotic)',isHuman?'pass':'warn','Total: '+totalTime+'ms, Avg: '+Math.round(avgInterval)+'ms');interactionResults.clickseq={status:isHuman?'pass':'warn',totalTime,avgInterval:Math.round(avgInterval)};}}else{cell.classList.add('wrong');setTimeout(()=>cell.classList.remove('wrong'),500);}});});
+}
+
+function initTypingTest(word){
+  const input=document.getElementById('typeInput');const status=document.getElementById('typeStatus');
+  if(!input)return;let keyTimes=[];let startTime=0;
+  input.addEventListener('keydown',e=>{if(!startTime)startTime=Date.now();keyTimes.push({key:e.key,time:Date.now()-startTime});});
+  input.addEventListener('input',()=>{if(input.value.toUpperCase()===word){const totalTime=Date.now()-startTime;const intervals=[];for(let i=1;i<keyTimes.length;i++)intervals.push(keyTimes[i].time-keyTimes[i-1].time);const avgInterval=intervals.length?intervals.reduce((a,b)=>a+b,0)/intervals.length:0;const variance=intervals.length?intervals.reduce((s,v)=>s+Math.pow(v-avgInterval,2),0)/intervals.length:0;const isHuman=avgInterval>60&&variance>200;status.textContent=isHuman?'✅ Passed (human-like)':'⚠️ Passed but robotic';status.className='status '+(isHuman?'pass':'warn');updateItem('typing',isHuman?'Passed (human-like)':'Passed (robotic)',isHuman?'pass':'warn','Total: '+totalTime+'ms, Avg: '+Math.round(avgInterval)+'ms');interactionResults.typing={status:isHuman?'pass':'warn',totalTime,avgInterval:Math.round(avgInterval),variance:Math.round(variance)};}});
+}
+
+function initDragDrop(){
+  const sources=document.querySelectorAll('.drag-source');const targets=document.querySelectorAll('.drag-target');const status=document.getElementById('dragStatus');
+  if(!sources.length)return;let matched=0;let dragId=null;
+  sources.forEach(s=>{s.addEventListener('dragstart',e=>{dragId=s.dataset.id;e.dataTransfer.effectAllowed='move';s.style.opacity='0.5';});s.addEventListener('dragend',()=>{s.style.opacity='1';});});
+  targets.forEach(t=>{t.addEventListener('dragover',e=>{e.preventDefault();e.dataTransfer.dropEffect='move';});t.addEventListener('drop',e=>{e.preventDefault();if(dragId===t.dataset.accept){t.textContent=t.textContent.replace('Drop','✅');t.classList.add('matched');const src=document.querySelector(`.drag-source[data-id="${dragId}"]`);if(src)src.style.display='none';matched++;if(matched>=3){status.textContent='✅ All matched!';status.className='status pass';updateItem('dragdrop','Passed','pass');interactionResults.dragdrop={status:'pass'};}}else{t.style.borderColor='var(--red)';setTimeout(()=>t.style.borderColor='',500);}dragId=null;});});
+}
+
+runAll();
+</script>
+</body>
+</html>

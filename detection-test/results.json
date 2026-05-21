@@ -1,0 +1,24 @@
+[
+  {
+    "id": "971ee61d",
+    "timestamp": "2026-05-20T16:07:31.597749+00:00",
+    "profile_name": "Test-Profile",
+    "score": 85,
+    "summary": {
+      "pass": 17,
+      "warn": 2,
+      "fail": 1
+    },
+    "categories": [],
+    "captcha_results": {
+      "recaptcha": {
+        "status": "pass"
+      }
+    },
+    "interaction_results": {
+      "slider": {
+        "status": "pass"
+      }
+    }
+  }
+]

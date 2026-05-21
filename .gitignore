@@ -24,3 +24,10 @@ CLAUDE.md
 publish-docker.sh
 .beads
 debug
+
+# Runtime data
+.data/
+
+# Embedded repos (reference only)
+CloakBrowser/
+skyvern/

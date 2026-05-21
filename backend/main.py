@@ -36,10 +36,15 @@ from .models import (
     ProfileUpdate,
     StatusResponse,
     TagResponse,
+    WorkflowCreate,
+    WorkflowResponse,
+    WorkflowRunCreate,
+    WorkflowRunResponse,
 )
 
 logger = logging.getLogger("cloakbrowser.manager")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+from .structured_logging import setup_logging
+setup_logging()
 logging.getLogger("websockets").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -372,14 +377,31 @@ def _filter_rfb_client_messages(data: bytes) -> bytes:
     return bytes(result)
 
 
+from .memory_guard import MemoryGuard
+from .rate_limiter import rate_limiter
+
+_memory_guard: MemoryGuard | None = None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _memory_guard
+
     db.init_db()
     await browser_mgr.cleanup_stale()
     browser_mgr._auto_launch_task = asyncio.create_task(browser_mgr.auto_launch_all())
+
+    from .skyvern_adapter import register_cloakbrowser_types
+    register_cloakbrowser_types()
+
+    _memory_guard = MemoryGuard(browser_manager=browser_mgr)
+    _memory_guard.start()
+
     logger.info("CloakBrowser Manager started")
     yield
     logger.info("Shutting down — stopping all browsers...")
+    if _memory_guard:
+        _memory_guard.stop()
     if browser_mgr._auto_launch_task and not browser_mgr._auto_launch_task.done():
         browser_mgr._auto_launch_task.cancel()
         await asyncio.gather(browser_mgr._auto_launch_task, return_exceptions=True)
@@ -388,6 +410,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="CloakBrowser Manager", lifespan=lifespan)
 app.add_middleware(AuthMiddleware)
+
+
+# ── Workflow API ──────────────────────────────────────────────────────────────
+
+from .workflow_api import router as workflow_router
+from .workflow_executor import WorkflowExecutor
+
+_workflow_executor = WorkflowExecutor(browser_manager=browser_mgr)
+
+from .workflow_api import init_executor
+init_executor(_workflow_executor)
+
+app.include_router(workflow_router)
 
 
 # ── Authentication ────────────────────────────────────────────────────────────
@@ -577,6 +612,63 @@ async def get_system_status():
         binary_version=CHROMIUM_VERSION,
         profiles_total=len(profiles),
     )
+
+
+@app.get("/api/status/health")
+async def health_check():
+    """Deep health check: DB + LLM + Browser pool."""
+    checks: dict[str, str] = {}
+
+    try:
+        db.list_profiles()
+        checks["database"] = "ok"
+    except Exception as e:
+        checks["database"] = f"error: {e}"
+
+    try:
+        from .llm_config import LLMConfig
+        llm = LLMConfig.get()
+        checks["llm"] = "ok" if llm.is_configured() else "not_configured"
+    except Exception as e:
+        checks["llm"] = f"error: {e}"
+
+    checks["browser_pool"] = f"ok ({len(browser_mgr.running)} active)"
+
+    try:
+        from .resource_manager import ResourceManager
+        rm = _workflow_executor._resource_manager if _workflow_executor else None
+        if rm:
+            checks["resources"] = "ok"
+            checks["resource_details"] = str(rm.get_status())
+        else:
+            checks["resources"] = "not_initialized"
+    except Exception as e:
+        checks["resources"] = f"error: {e}"
+
+    if _memory_guard:
+        checks["memory_guard"] = "ok" if _memory_guard.is_running else "stopped"
+    else:
+        checks["memory_guard"] = "not_initialized"
+
+    checks["rate_limiter"] = "ok"
+
+    all_ok = all(v == "ok" or v.startswith("ok") for v in checks.values() if not v.startswith("error"))
+    status_code = 200 if all_ok else 503
+
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        content={"status": "healthy" if all_ok else "degraded", "checks": checks},
+        status_code=status_code,
+    )
+
+
+@app.get("/metrics")
+async def prometheus_metrics():
+    """Prometheus-compatible metrics endpoint."""
+    from .metrics import MetricsCollector
+    metrics = MetricsCollector.get()
+    from fastapi.responses import PlainTextResponse
+    return PlainTextResponse(content=metrics.get_prometheus_output(), media_type="text/plain")
 
 
 # ── Clipboard Relay ──────────────────────────────────────────────────────────
@@ -858,6 +950,7 @@ async def cdp_info(profile_id: str):
 @app.get("/api/profiles/{profile_id}/cdp/json/version/")
 @app.get("/api/profiles/{profile_id}/cdp/json/version")
 async def cdp_json_version(profile_id: str, request: Request):
+    rate_limiter.check_cdp_rate_limit(request)
     """Proxy Chrome's /json/version, rewriting WS URLs to go through our proxy."""
     running = browser_mgr.running.get(profile_id)
     if not running:
@@ -885,6 +978,7 @@ async def cdp_json_version(profile_id: str, request: Request):
 @app.get("/api/profiles/{profile_id}/cdp/json/")
 @app.get("/api/profiles/{profile_id}/cdp/json")
 async def cdp_json_list(profile_id: str, request: Request):
+    rate_limiter.check_cdp_rate_limit(request)
     """Proxy Chrome's /json/list, rewriting WS URLs."""
     running = browser_mgr.running.get(profile_id)
     if not running:

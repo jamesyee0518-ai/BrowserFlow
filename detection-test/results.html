@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Results Comparison - CloakBrowser Detection Test</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--bg:#0f1117;--surface:#1a1d27;--surface2:#242836;--border:#2e3348;--text:#e4e6f0;--text2:#8b8fa3;--green:#22c55e;--red:#ef4444;--yellow:#f59e0b;--blue:#3b82f6;--purple:#a855f7;--cyan:#06b6d4}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+.header{background:linear-gradient(135deg,#1a1d27 0%,#242836 100%);border-bottom:1px solid var(--border);padding:20px 32px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px}
+.header h1{font-size:20px;font-weight:700}
+.header-actions{display:flex;gap:10px;align-items:center}
+.btn{padding:7px 16px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:opacity .2s;text-decoration:none}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--blue);color:#fff}
+.btn-red{background:var(--red);color:#fff}
+.btn-sm{padding:4px 10px;font-size:11px}
+.container{max-width:1400px;margin:0 auto;padding:20px 32px}
+.empty{text-align:center;padding:60px 20px;color:var(--text2)}
+.empty .icon{font-size:48px;margin-bottom:12px}
+.empty p{font-size:14px;margin-bottom:16px}
+.table-wrap{overflow-x:auto;margin-top:16px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--surface2);padding:10px 12px;text-align:left;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0}
+td{padding:8px 12px;border-bottom:1px solid rgba(46,51,72,.5);vertical-align:top}
+tr:hover td{background:rgba(59,130,246,.05)}
+.score{font-weight:700;font-size:16px}
+.score-high{color:var(--green)}.score-mid{color:var(--yellow)}.score-low{color:var(--red)}
+.tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:10px;font-weight:600;margin:1px}
+.tag-pass{background:rgba(34,197,94,.15);color:var(--green)}
+.tag-fail{background:rgba(239,68,68,.15);color:var(--red)}
+.tag-warn{background:rgba(245,158,11,.15);color:var(--yellow)}
+.detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;padding:8px 0}
+.detail-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px}
+.detail-card h4{font-size:11px;color:var(--text2);margin-bottom:6px}
+.detail-item{display:flex;justify-content:space-between;padding:2px 0;font-size:11px}
+.detail-item .k{color:var(--text2)}.detail-item .v{font-weight:500}
+.v-pass{color:var(--green)}.v-fail{color:var(--red)}.v-warn{color:var(--yellow)}.v-info{color:var(--cyan)}
+.compare-section{margin-top:24px}
+.compare-section h2{font-size:16px;font-weight:600;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border)}
+.diff-table{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.diff-table th{background:var(--surface2);padding:8px 10px;text-align:left;font-weight:600;color:var(--text2);border-bottom:1px solid var(--border)}
+.diff-table td{padding:6px 10px;border-bottom:1px solid rgba(46,51,72,.5)}
+.diff-same{color:var(--text2)}.diff-diff{color:var(--yellow);font-weight:600}
+.footer{text-align:center;padding:24px;color:var(--text2);font-size:11px}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 Results Comparison</h1>
+  <div class="header-actions">
+    <a href="index.html" class="btn btn-primary">← Back to Test</a>
+    <button class="btn btn-red btn-sm" onclick="clearAll()">Clear All</button>
+    <button class="btn btn-primary btn-sm" onclick="loadResults()">🔄 Refresh</button>
+  </div>
+</div>
+<div class="container" id="app"></div>
+<div class="footer">CloakBrowser Detection Test — Results Comparison</div>
+<script>
+let allResults=[];
+function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function loadResults(){
+  const app=document.getElementById('app');
+  try{
+    allResults=JSON.parse(localStorage.getItem('cb_detection_results')||'[]');
+  }catch(e){allResults=[];}
+  render();
+}
+
+function render(){
+  const app=document.getElementById('app');
+  if(!allResults.length){
+    app.innerHTML=`<div class="empty"><div class="icon">📭</div><p>No test results yet</p><a href="index.html" class="btn btn-primary">Go to Detection Test →</a></div>`;
+    return;
+  }
+  let html='';
+  html+=`<div class="table-wrap"><table><thead><tr>
+    <th>ID</th><th>Profile</th><th>Score</th><th>Pass</th><th>Warn</th><th>Fail</th>
+    <th>reCAPTCHA</th><th>hCaptcha</th><th>Turnstile</th>
+    <th>Slider</th><th>Click</th><th>Typing</th><th>Drag</th>
+    <th>Time</th><th>Actions</th>
+  </tr></thead><tbody>`;
+  allResults.forEach(r=>{
+    const scoreCls=r.score>=80?'score-high':r.score>=50?'score-mid':'score-low';
+    const cr=r.captcha_results||{};const ir=r.interaction_results||{};
+    const capTag=s=>s==='pass'?'<span class="tag tag-pass">✓</span>':s==='warn'?'<span class="tag tag-warn">!</span>':s==='fail'?'<span class="tag tag-fail">✗</span>':'<span class="tag" style="color:var(--text2)">-</span>';
+    const ts=r.timestamp?new Date(r.timestamp).toLocaleString():'-';
+    html+=`<tr>
+      <td style="font-family:monospace;color:var(--text2)">${r.id?r.id.substring(0,6):'-'}</td>
+      <td><strong>${esc(r.profile_name)}</strong></td>
+      <td><span class="score ${scoreCls}">${r.score}</span></td>
+      <td style="color:var(--green)">${r.summary?.pass||0}</td>
+      <td style="color:var(--yellow)">${r.summary?.warn||0}</td>
+      <td style="color:var(--red)">${r.summary?.fail||0}</td>
+      <td>${capTag(cr.recaptcha?.status)}</td>
+      <td>${capTag(cr.hcaptcha?.status)}</td>
+      <td>${capTag(cr.turnstile?.status)}</td>
+      <td>${capTag(ir.slider?.status)}</td>
+      <td>${capTag(ir.clickseq?.status)}</td>
+      <td>${capTag(ir.typing?.status)}</td>
+      <td>${capTag(ir.dragdrop?.status)}</td>
+      <td style="font-size:11px;color:var(--text2)">${ts}</td>
+      <td><button class="btn btn-red btn-sm" onclick="deleteResult('${r.id}')">Delete</button></td>
+    </tr>`;
+  });
+  html+=`</tbody></table></div>`;
+
+  if(allResults.length>=2){
+    html+=`<div class="compare-section"><h2>🔍 Fingerprint Comparison</h2>`;
+    html+=`<div class="table-wrap"><table class="diff-table"><thead><tr><th>Test Item</th>`;
+    allResults.forEach(r=>{html+=`<th>${esc(r.profile_name)}</th>`;});
+    html+=`</tr></thead><tbody>`;
+    const keyItems=['navigator.webdriver','GPU Vendor','GPU Renderer','Canvas Hash','Audio Hash','Screen Resolution','Hardware Concurrency','Device Memory','Timezone','Language','User Agent','WebRTC Local IPs','UA/Platform Consistency','Rendering Mode','Public IP','Country / Region','IP/Browser Timezone Match','IP/Language Match'];
+    keyItems.forEach(key=>{
+      const vals=allResults.map(r=>{const found=findItem(r.categories,key);return found?found.val:'-';});
+      const allSame=vals.every(v=>v===vals[0]);
+      html+=`<tr><td style="font-weight:600">${key}</td>`;
+      vals.forEach(v=>{html+=`<td class="${allSame?'diff-same':'diff-diff'}" style="font-size:11px;word-break:break-all;max-width:200px">${esc(v)}</td>`;});
+      html+=`</tr>`;
+    });
+    html+=`</tbody></table></div></div>`;
+  }
+
+  html+=`<div class="compare-section"><h2>📋 Detail per Profile</h2>`;
+  allResults.forEach(r=>{
+    html+=`<div style="margin-bottom:16px"><h3 style="font-size:14px;margin:8px 0">${esc(r.profile_name)} <span class="score ${r.score>=80?'score-high':r.score>=50?'score-mid':'score-low'}" style="font-size:14px">${r.score}</span></h3>`;
+    html+=`<div class="detail-grid">`;
+    (r.categories||[]).forEach(cat=>{
+      html+=`<div class="detail-card"><h4>${esc(cat.category)}</h4>`;
+      (cat.items||[]).forEach(item=>{
+        const cls=item.cls==='pass'?'v-pass':item.cls==='fail'?'v-fail':item.cls==='warn'?'v-warn':'v-info';
+        html+=`<div class="detail-item"><span class="k">${esc(item.key)}</span><span class="v ${cls}">${esc(item.val)}</span></div>`;
+      });
+      html+=`</div>`;
+    });
+    html+=`</div></div>`;
+  });
+  html+=`</div>`;
+  app.innerHTML=html;
+}
+
+function findItem(categories,key){
+  for(const cat of categories){for(const item of cat.items){if(item.key===key)return item;}}
+  return null;
+}
+
+function deleteResult(id){
+  if(!confirm('Delete this result?'))return;
+  allResults=allResults.filter(r=>r.id!==id);
+  localStorage.setItem('cb_detection_results',JSON.stringify(allResults));
+  render();
+}
+
+function clearAll(){
+  if(!confirm('Delete ALL results?'))return;
+  localStorage.removeItem('cb_detection_results');
+  allResults=[];
+  render();
+}
+
+loadResults();
+</script>
+</body>
+</html>

@@ -73,6 +73,64 @@ export interface SystemStatus {
   profiles_total: number;
 }
 
+export interface WorkflowBlock {
+  block_type: "task" | "code" | "for_loop" | "conditional" | "navigation" | "extraction" | "login" | "action";
+  label: string;
+  url?: string;
+  navigation_goal?: string;
+  data_extraction_goal?: string;
+  data_schema?: Record<string, unknown>;
+  code?: string;
+  max_steps?: number;
+  loop_over?: unknown[];
+  loop_blocks?: WorkflowBlock[];
+  condition?: string;
+  then_blocks?: WorkflowBlock[];
+  else_blocks?: WorkflowBlock[];
+  cached_script?: string;
+  ai_fallback?: boolean;
+}
+
+export interface Workflow {
+  id: string;
+  title: string;
+  description: string | null;
+  profile_id: string;
+  definition: { blocks: WorkflowBlock[] } | null;
+  run_with: "agent" | "script";
+  ai_fallback: boolean;
+  adaptive_caching: boolean;
+  schedule: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorkflowCreateData {
+  title: string;
+  description?: string | null;
+  profile_id: string;
+  definition?: { blocks: WorkflowBlock[] } | null;
+  run_with?: "agent" | "script";
+  ai_fallback?: boolean;
+  adaptive_caching?: boolean;
+  schedule?: string | null;
+}
+
+export interface WorkflowRun {
+  workflow_run_id: string;
+  workflow_id: string;
+  profile_id: string;
+  status: string;
+  execution_path: "agent" | "script" | "agent_fallback";
+  blocks_completed: number;
+  blocks_total: number;
+  llm_tokens_used: number;
+  duration_seconds: number;
+  output: Record<string, unknown> | null;
+  error: string | null;
+}
+
 class ApiError extends Error {
   constructor(
     public status: number,
@@ -155,4 +213,35 @@ export const api = {
 
   getClipboard: (id: string) =>
     request<{ text: string }>(`/api/profiles/${id}/clipboard`),
+
+  listWorkflows: () => request<Workflow[]>("/api/workflows"),
+
+  getWorkflow: (id: string) => request<Workflow>(`/api/workflows/${id}`),
+
+  createWorkflow: (data: WorkflowCreateData) =>
+    request<Workflow>("/api/workflows", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  updateWorkflow: (id: string, data: WorkflowCreateData) =>
+    request<Workflow>(`/api/workflows/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteWorkflow: (id: string) =>
+    request<void>(`/api/workflows/${id}`, { method: "DELETE" }),
+
+  runWorkflow: (id: string, parameters?: Record<string, unknown>) =>
+    request<WorkflowRun>(`/api/workflows/${id}/run`, {
+      method: "POST",
+      body: JSON.stringify(parameters ? { parameters } : {}),
+    }),
+
+  listWorkflowRuns: (limit = 50) =>
+    request<WorkflowRun[]>(`/api/workflows/runs?limit=${limit}`),
+
+  getWorkflowRun: (runId: string) =>
+    request<WorkflowRun>(`/api/workflows/runs/${runId}`),
 };

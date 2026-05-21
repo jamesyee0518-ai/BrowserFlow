@@ -11,7 +11,9 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
-DATA_DIR = Path("/data")
+import os
+
+DATA_DIR = Path(os.environ.get("CLOAKBROWSER_DATA_DIR", "/data"))
 DB_PATH = DATA_DIR / "profiles.db"
 
 
@@ -63,6 +65,38 @@ def init_db():
                 tag TEXT NOT NULL,
                 color TEXT,
                 PRIMARY KEY (profile_id, tag)
+            );
+
+            CREATE TABLE IF NOT EXISTS workflows (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                description TEXT,
+                profile_id TEXT NOT NULL,
+                definition TEXT,
+                run_with TEXT DEFAULT 'agent',
+                ai_fallback BOOLEAN DEFAULT 1,
+                adaptive_caching BOOLEAN DEFAULT 1,
+                schedule TEXT,
+                status TEXT DEFAULT 'idle',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS workflow_runs (
+                id TEXT PRIMARY KEY,
+                workflow_id TEXT NOT NULL,
+                profile_id TEXT NOT NULL,
+                parameters TEXT,
+                status TEXT DEFAULT 'pending',
+                execution_path TEXT,
+                blocks_completed INTEGER DEFAULT 0,
+                blocks_total INTEGER DEFAULT 0,
+                llm_tokens_used INTEGER DEFAULT 0,
+                duration_seconds REAL DEFAULT 0.0,
+                output TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
             );
         """)
         conn.commit()
@@ -222,3 +256,186 @@ def delete_profile(profile_id: str) -> bool:
         cursor = conn.execute("DELETE FROM profiles WHERE id = ?", (profile_id,))
         conn.commit()
         return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Workflow CRUD
+# ---------------------------------------------------------------------------
+
+def create_workflow(
+    title: str,
+    profile_id: str,
+    description: str | None = None,
+    definition: dict | None = None,
+    run_with: str = "agent",
+    ai_fallback: bool = True,
+    adaptive_caching: bool = True,
+    schedule: str | None = None,
+) -> dict[str, Any]:
+    workflow_id = str(uuid.uuid4())
+    now = _now()
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO workflows (
+                id, title, description, profile_id, definition, run_with,
+                ai_fallback, adaptive_caching, schedule, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                workflow_id, title, description, profile_id,
+                json.dumps(definition) if definition else None,
+                run_with, ai_fallback, adaptive_caching, schedule,
+                "idle", now, now,
+            ),
+        )
+        conn.commit()
+    return get_workflow(workflow_id)  # type: ignore[return-value]
+
+
+def get_workflow(workflow_id: str) -> dict[str, Any] | None:
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM workflows WHERE id = ?", (workflow_id,)).fetchone()
+        if not row:
+            return None
+        workflow = dict(row)
+        if workflow.get("definition"):
+            workflow["definition"] = json.loads(workflow["definition"])
+        return workflow
+
+
+def list_workflows() -> list[dict[str, Any]]:
+    with get_db() as conn:
+        rows = conn.execute("SELECT * FROM workflows ORDER BY created_at DESC").fetchall()
+        workflows = []
+        for row in rows:
+            workflow = dict(row)
+            if workflow.get("definition"):
+                workflow["definition"] = json.loads(workflow["definition"])
+            workflows.append(workflow)
+        return workflows
+
+
+def update_workflow(workflow_id: str, **fields: Any) -> dict[str, Any] | None:
+    existing = get_workflow(workflow_id)
+    if not existing:
+        return None
+
+    update_cols = []
+    update_vals = []
+
+    if "definition" in fields and fields["definition"] is not None:
+        fields["definition"] = json.dumps(fields["definition"])
+
+    for col in (
+        "title", "description", "profile_id", "definition", "run_with",
+        "ai_fallback", "adaptive_caching", "schedule", "status",
+    ):
+        if col in fields:
+            update_cols.append(f"{col} = ?")
+            update_vals.append(fields[col])
+
+    if update_cols:
+        update_cols.append("updated_at = ?")
+        update_vals.append(_now())
+        update_vals.append(workflow_id)
+        with get_db() as conn:
+            conn.execute(
+                f"UPDATE workflows SET {', '.join(update_cols)} WHERE id = ?",
+                update_vals,
+            )
+            conn.commit()
+
+    return get_workflow(workflow_id)
+
+
+def delete_workflow(workflow_id: str) -> bool:
+    with get_db() as conn:
+        cursor = conn.execute("DELETE FROM workflows WHERE id = ?", (workflow_id,))
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Workflow Run CRUD
+# ---------------------------------------------------------------------------
+
+def create_workflow_run(
+    run_id: str,
+    workflow_id: str,
+    profile_id: str,
+    parameters: dict | None = None,
+) -> dict[str, Any]:
+    now = _now()
+    with get_db() as conn:
+        conn.execute(
+            """INSERT INTO workflow_runs (
+                id, workflow_id, profile_id, parameters, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run_id, workflow_id, profile_id,
+                json.dumps(parameters) if parameters else None,
+                "pending", now, now,
+            ),
+        )
+        conn.commit()
+    return get_workflow_run(run_id)  # type: ignore[return-value]
+
+
+def get_workflow_run(run_id: str) -> dict[str, Any] | None:
+    with get_db() as conn:
+        row = conn.execute("SELECT * FROM workflow_runs WHERE id = ?", (run_id,)).fetchone()
+        if not row:
+            return None
+        run = dict(row)
+        for json_field in ("parameters", "output"):
+            if run.get(json_field):
+                run[json_field] = json.loads(run[json_field])
+        return run
+
+
+def update_workflow_run(run_id: str, **fields: Any) -> dict[str, Any] | None:
+    existing = get_workflow_run(run_id)
+    if not existing:
+        return None
+
+    update_cols = []
+    update_vals = []
+
+    if "output" in fields and fields["output"] is not None:
+        fields["output"] = json.dumps(fields["output"])
+
+    for col in (
+        "status", "execution_path", "blocks_completed", "blocks_total",
+        "llm_tokens_used", "duration_seconds", "output", "error",
+    ):
+        if col in fields:
+            update_cols.append(f"{col} = ?")
+            update_vals.append(fields[col])
+
+    if update_cols:
+        update_cols.append("updated_at = ?")
+        update_vals.append(_now())
+        update_vals.append(run_id)
+        with get_db() as conn:
+            conn.execute(
+                f"UPDATE workflow_runs SET {', '.join(update_cols)} WHERE id = ?",
+                update_vals,
+            )
+            conn.commit()
+
+    return get_workflow_run(run_id)
+
+
+def list_workflow_runs(limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT * FROM workflow_runs ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+        runs = []
+        for row in rows:
+            run = dict(row)
+            for json_field in ("parameters", "output"):
+                if run.get(json_field):
+                    run[json_field] = json.loads(run[json_field])
+            runs.append(run)
+        return runs

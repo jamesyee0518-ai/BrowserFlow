@@ -132,3 +132,47 @@ class ClipboardRequest(BaseModel):
 
 class LoginRequest(BaseModel):
     token: str
+
+
+class WorkflowCreate(BaseModel):
+    title: str
+    description: str | None = None
+    profile_id: str
+    definition: dict | None = None
+    run_with: Literal["agent", "script"] = "agent"
+    ai_fallback: bool = True
+    adaptive_caching: bool = True
+    schedule: str | None = None
+
+
+class WorkflowResponse(BaseModel):
+    id: str
+    title: str
+    description: str | None = None
+    profile_id: str
+    definition: dict | None = None
+    run_with: str = "agent"
+    ai_fallback: bool = True
+    adaptive_caching: bool = True
+    schedule: str | None = None
+    status: str = "idle"
+    created_at: str
+    updated_at: str
+
+
+class WorkflowRunCreate(BaseModel):
+    parameters: dict | None = None
+
+
+class WorkflowRunResponse(BaseModel):
+    workflow_run_id: str
+    workflow_id: str
+    profile_id: str
+    status: str
+    execution_path: Literal["agent", "script", "agent_fallback"] = "agent"
+    blocks_completed: int = 0
+    blocks_total: int = 0
+    llm_tokens_used: int = 0
+    duration_seconds: float = 0.0
+    output: dict | None = None
+    error: str | None = None

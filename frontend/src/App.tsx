@@ -1,16 +1,21 @@
 import { useState, useCallback, useEffect } from "react";
-import { Lock, PanelLeftClose, PanelLeft } from "lucide-react";
+import { Lock, PanelLeftClose, PanelLeft, Workflow } from "lucide-react";
 import { useProfiles } from "./hooks/useProfiles";
-import { api, setOnUnauthorized, type ProfileCreateData } from "./lib/api";
+import { useWorkflows } from "./hooks/useWorkflows";
+import { api, setOnUnauthorized, type ProfileCreateData, type WorkflowRun } from "./lib/api";
 import { ProfileList } from "./components/ProfileList";
 import { ProfileForm } from "./components/ProfileForm";
 import { ProfileViewer } from "./components/ProfileViewer";
 import { LaunchButton } from "./components/LaunchButton";
 import { StatusIndicator } from "./components/StatusIndicator";
 import { LoginPage } from "./components/LoginPage";
+import { WorkflowList } from "./components/WorkflowList";
+import { WorkflowEditor } from "./components/WorkflowEditor";
+import { WorkflowRunDetail } from "./components/WorkflowRunDetail";
 
 type AuthState = "checking" | "required" | "ok" | "error";
 type View = "empty" | "create" | "edit" | "view";
+type Tab = "profiles" | "workflows";
 
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>("checking");
@@ -90,11 +95,18 @@ interface AppContentProps {
 
 function AppContent({ authRequired, onLogout }: AppContentProps) {
   const { profiles, loading, error, create, update, remove, launch, stop } = useProfiles();
+  const { workflows, create: createWorkflow, update: updateWorkflow, remove: removeWorkflow, run: runWorkflow } = useWorkflows();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState<View>("empty");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [tab, setTab] = useState<Tab>("profiles");
+
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+  const [workflowView, setWorkflowView] = useState<"list" | "edit" | "run">("list");
+  const [selectedRun, setSelectedRun] = useState<WorkflowRun | null>(null);
 
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
+  const selectedWorkflow = workflows.find((w) => w.id === selectedWorkflowId) ?? null;
 
   const handleSelect = useCallback((id: string) => {
     setSelectedId(id);
@@ -155,13 +167,40 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
     <div className="h-screen flex">
       {/* Sidebar */}
       {sidebarOpen && (
-        <div className="w-64 border-r border-border bg-surface-1 flex-shrink-0">
-          <ProfileList
-            profiles={profiles}
-            selectedId={selectedId}
-            onSelect={handleSelect}
-            onNew={handleNew}
-          />
+        <div className="w-64 border-r border-border bg-surface-1 flex-shrink-0 flex flex-col">
+          <div className="flex border-b border-border">
+            <button
+              onClick={() => setTab("profiles")}
+              className={`flex-1 px-3 py-2 text-xs font-medium ${tab === "profiles" ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-500 hover:text-gray-300"}`}
+            >
+              Profiles
+            </button>
+            <button
+              onClick={() => setTab("workflows")}
+              className={`flex-1 px-3 py-2 text-xs font-medium flex items-center justify-center gap-1 ${tab === "workflows" ? "text-blue-400 border-b-2 border-blue-400" : "text-gray-500 hover:text-gray-300"}`}
+            >
+              <Workflow className="h-3 w-3" /> Workflows
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {tab === "profiles" ? (
+              <ProfileList
+                profiles={profiles}
+                selectedId={selectedId}
+                onSelect={handleSelect}
+                onNew={handleNew}
+              />
+            ) : (
+              <WorkflowList
+                workflows={workflows}
+                selectedId={selectedWorkflowId}
+                onSelect={(id) => { setSelectedWorkflowId(id); setWorkflowView("edit"); }}
+                onNew={() => { setSelectedWorkflowId(null); setWorkflowView("edit"); }}
+                onRun={(id) => runWorkflow(id)}
+                onDelete={(id) => removeWorkflow(id)}
+              />
+            )}
+          </div>
         </div>
       )}
 
@@ -214,7 +253,33 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto overscroll-contain">
-          {view === "empty" && (
+          {tab === "workflows" && workflowView === "edit" && (
+            <WorkflowEditor
+              workflow={selectedWorkflow}
+              profiles={profiles}
+              onSave={async (data) => {
+                if (selectedWorkflow) {
+                  return await updateWorkflow(selectedWorkflow.id, data);
+                } else {
+                  return await createWorkflow(data);
+                }
+              }}
+              onRun={async (id) => {
+                const result = await runWorkflow(id);
+                return result;
+              }}
+              onCancel={() => { setSelectedWorkflowId(null); setWorkflowView("list"); }}
+            />
+          )}
+
+          {tab === "workflows" && selectedRun && (
+            <WorkflowRunDetail
+              run={selectedRun}
+              onClose={() => setSelectedRun(null)}
+            />
+          )}
+
+          {tab === "profiles" && view === "empty" && (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <p className="text-gray-500 text-sm">Select a profile or create a new one</p>
@@ -222,7 +287,7 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
             </div>
           )}
 
-          {view === "create" && (
+          {tab === "profiles" && view === "create" && (
             <ProfileForm
               profile={null}
               onSave={handleCreate}
@@ -230,7 +295,7 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
             />
           )}
 
-          {view === "edit" && selected && (
+          {tab === "profiles" && view === "edit" && selected && (
             <ProfileForm
               profile={selected}
               onSave={handleUpdate}
@@ -242,7 +307,7 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
             />
           )}
 
-          {view === "view" && selected && selected.status === "running" && (
+          {tab === "profiles" && view === "view" && selected && selected.status === "running" && (
             <ProfileViewer
               key={selected.id}
               profileId={selected.id}

@@ -1,5 +1,5 @@
 # Stage 1: Build React frontend
-FROM node:20-slim AS frontend-builder
+FROM docker.1ms.run/library/node:20-slim AS frontend-builder
 WORKDIR /build
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
@@ -7,7 +7,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Production image
-FROM python:3.12-slim
+FROM docker.1ms.run/library/python:3.12-slim
 
 # Chromium system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \

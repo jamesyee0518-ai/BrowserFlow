@@ -335,6 +335,78 @@ class BrowserManager:
 
         await self.vnc.cleanup_all()
 
+    async def allocate_for_workflow(
+        self,
+        profile_id: str,
+        workflow_run_id: str,
+        cdp_port: int | None = None,
+    ) -> RunningProfile:
+        """Allocate a browser instance for workflow execution.
+
+        If the profile is already running, reuse it.
+        Otherwise, launch a new instance.
+        """
+        running = self.running.get(profile_id)
+        if running:
+            logger.info(
+                "Reusing existing browser for workflow %s on profile %s",
+                workflow_run_id, profile_id,
+            )
+            return running
+
+        from . import database as db
+        profile = db.get_profile(profile_id)
+        if not profile:
+            raise ValueError(f"Profile {profile_id} not found")
+
+        logger.info(
+            "Allocating browser for workflow %s on profile %s",
+            workflow_run_id, profile_id,
+        )
+        return await self.launch(profile)
+
+    async def release_from_workflow(
+        self,
+        profile_id: str,
+        workflow_run_id: str,
+        keep_alive: bool = False,
+    ) -> None:
+        """Release a browser instance after workflow completion.
+
+        If keep_alive is True, the browser stays running for reuse.
+        Otherwise, it is stopped.
+        """
+        if keep_alive:
+            logger.info(
+                "Keeping browser alive for profile %s after workflow %s",
+                profile_id, workflow_run_id,
+            )
+            return
+
+        running = self.running.get(profile_id)
+        if not running:
+            return
+
+        profile = None
+        try:
+            from . import database as db
+            profile = db.get_profile(profile_id)
+        except Exception:
+            pass
+
+        if profile and profile.get("auto_launch"):
+            logger.info(
+                "Keeping browser alive for auto-launch profile %s after workflow %s",
+                profile_id, workflow_run_id,
+            )
+            return
+
+        logger.info(
+            "Releasing browser for profile %s after workflow %s",
+            profile_id, workflow_run_id,
+        )
+        await self.stop(profile_id)
+
     async def cleanup_stale(self):
         """Kill orphan processes from previous container runs."""
         await self.vnc.cleanup_stale()

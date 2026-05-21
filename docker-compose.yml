@@ -7,3 +7,33 @@ services:
       - ~/.cloakbrowser-manager:/data
     environment:
       - AUTH_TOKEN=${AUTH_TOKEN:-}
+      - LOG_FORMAT=${LOG_FORMAT:-text}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MAX_CONCURRENT_WORKFLOWS=${MAX_CONCURRENT_WORKFLOWS:-10}
+      - MAX_TOTAL_BROWSERS=${MAX_TOTAL_BROWSERS:-20}
+      - MAX_MEMORY_PER_BROWSER_MB=${MAX_MEMORY_PER_BROWSER_MB:-2048}
+      - MAX_LLM_TOKENS_PER_TASK=${MAX_LLM_TOKENS_PER_TASK:-200000}
+      - MAX_LLM_BUDGET_USD=${MAX_LLM_BUDGET_USD:-50.0}
+      - MEMORY_CHECK_INTERVAL=${MEMORY_CHECK_INTERVAL:-30}
+      - RATE_LIMIT_RPM=${RATE_LIMIT_RPM:-60}
+      - CDP_RATE_LIMIT_RPM=${CDP_RATE_LIMIT_RPM:-30}
+    deploy:
+      resources:
+        limits:
+          memory: ${DOCKER_MEMORY_LIMIT:-4g}
+          cpus: ${DOCKER_CPU_LIMIT:-2.0}
+        reservations:
+          memory: ${DOCKER_MEMORY_RESERVATION:-1g}
+          cpus: ${DOCKER_CPU_RESERVATION:-0.5}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/status/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
