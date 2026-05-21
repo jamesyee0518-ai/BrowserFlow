@@ -6,9 +6,12 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import time
 import traceback
+import urllib.request
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Literal
 
 from .browser_manager import BrowserManager
@@ -256,8 +259,20 @@ class ScriptExecutor:
         "len": len, "range": range, "enumerate": enumerate,
         "zip": zip, "sorted": sorted, "min": min, "max": max,
         "abs": abs, "round": round, "isinstance": isinstance,
+        "sum": sum, "any": any, "all": all,
         "True": True, "False": False, "None": None,
     }
+
+    def __init__(self, output_dir: str | None = None) -> None:
+        self._output_dir = output_dir
+
+    def _get_output_dir(self) -> str:
+        if self._output_dir:
+            return self._output_dir
+        data_dir = os.environ.get("CLOAKBROWSER_DATA_DIR", "/data")
+        out = os.path.join(data_dir, "workflow_outputs")
+        os.makedirs(out, exist_ok=True)
+        return out
 
     async def execute(
         self,
@@ -265,10 +280,56 @@ class ScriptExecutor:
         page: Any,
         context_values: dict[str, Any],
     ) -> dict[str, Any]:
+        output_dir = self._get_output_dir()
+
+        def _save_file(filename: str, content: bytes | str, subdir: str = "") -> str:
+            target_dir = os.path.join(output_dir, subdir) if subdir else output_dir
+            os.makedirs(target_dir, exist_ok=True)
+            safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+            filepath = os.path.join(target_dir, safe_name)
+            mode = "wb" if isinstance(content, bytes) else "w"
+            encoding = None if isinstance(content, bytes) else "utf-8"
+            with open(filepath, mode, encoding=encoding) as f:
+                f.write(content)
+            return filepath
+
+        def _download_file(url: str, filename: str, subdir: str = "") -> str:
+            target_dir = os.path.join(output_dir, subdir) if subdir else output_dir
+            os.makedirs(target_dir, exist_ok=True)
+            safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+            filepath = os.path.join(target_dir, safe_name)
+            urllib.request.urlretrieve(url, filepath)
+            return filepath
+
+        def _save_json(filename: str, data: Any, subdir: str = "") -> str:
+            target_dir = os.path.join(output_dir, subdir) if subdir else output_dir
+            os.makedirs(target_dir, exist_ok=True)
+            safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+            if not safe_name.endswith(".json"):
+                safe_name += ".json"
+            filepath = os.path.join(target_dir, safe_name)
+            with open(filepath, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return filepath
+
+        def _list_output_files(subdir: str = "") -> list[str]:
+            target_dir = os.path.join(output_dir, subdir) if subdir else output_dir
+            if not os.path.isdir(target_dir):
+                return []
+            return os.listdir(target_dir)
+
         local_vars: dict[str, Any] = {
             "__builtins__": self.ALLOWED_BUILTINS,
             "page": page,
             "context": context_values,
+            "output_dir": output_dir,
+            "save_file": _save_file,
+            "download_file": _download_file,
+            "save_json": _save_json,
+            "list_output_files": _list_output_files,
+            "os_path_join": os.path.join,
+            "json_dumps": json.dumps,
+            "json_loads": json.loads,
         }
 
         exec(script_code, local_vars)
@@ -277,7 +338,11 @@ class ScriptExecutor:
         if result is None:
             run_func = local_vars.get("run")
             if run_func and callable(run_func):
-                result = run_func(page, context_values)
+                maybe_coro = run_func(page, context_values)
+                if asyncio.iscoroutine(maybe_coro):
+                    result = await maybe_coro
+                else:
+                    result = maybe_coro
 
         if isinstance(result, dict):
             return result
@@ -646,10 +711,12 @@ class WorkflowExecutor:
                 system_prompt = (
                     "You are a browser automation agent. Analyze the screenshot and determine the next action. "
                     "Respond with a JSON object containing:\n"
-                    '- "action": one of "click", "fill", "select_option", "goto", "wait", "complete", "extract"\n'
+                    '- "action": one of "click", "fill", "select_option", "goto", "wait", "complete", "extract", "download"\n'
                     '- "selector": CSS selector for the target element (if applicable)\n'
                     '- "value": value to input (for fill/select_option)\n'
-                    '- "url": URL to navigate to (for goto)\n'
+                    '- "url": URL to navigate to (for goto) or file URL to download (for download)\n'
+                    '- "filename": filename to save as (for download)\n'
+                    '- "subdir": subdirectory name for saved files (for download, optional)\n'
                     '- "reasoning": brief explanation of why this action\n'
                     '- "data": extracted data (for extract/complete)\n'
                     "Always respond with valid JSON only."
@@ -776,6 +843,40 @@ class WorkflowExecutor:
             )
 
         try:
+            data_dir = os.environ.get("CLOAKBROWSER_DATA_DIR", "/data")
+            output_dir = os.path.join(data_dir, "workflow_outputs")
+            os.makedirs(output_dir, exist_ok=True)
+
+            def _save_file(filename: str, content: bytes | str, subdir: str = "") -> str:
+                target_dir = os.path.join(output_dir, subdir) if subdir else output_dir
+                os.makedirs(target_dir, exist_ok=True)
+                safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+                filepath = os.path.join(target_dir, safe_name)
+                mode = "wb" if isinstance(content, bytes) else "w"
+                encoding = None if isinstance(content, bytes) else "utf-8"
+                with open(filepath, mode, encoding=encoding) as f:
+                    f.write(content)
+                return filepath
+
+            def _download_file(url: str, filename: str, subdir: str = "") -> str:
+                target_dir = os.path.join(output_dir, subdir) if subdir else output_dir
+                os.makedirs(target_dir, exist_ok=True)
+                safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+                filepath = os.path.join(target_dir, safe_name)
+                urllib.request.urlretrieve(url, filepath)
+                return filepath
+
+            def _save_json(filename: str, data: Any, subdir: str = "") -> str:
+                target_dir = os.path.join(output_dir, subdir) if subdir else output_dir
+                os.makedirs(target_dir, exist_ok=True)
+                safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+                if not safe_name.endswith(".json"):
+                    safe_name += ".json"
+                filepath = os.path.join(target_dir, safe_name)
+                with open(filepath, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                return filepath
+
             safe_builtins = {
                 "int": int, "float": float, "str": str, "bool": bool,
                 "list": list, "dict": dict, "tuple": tuple, "set": set,
@@ -788,6 +889,13 @@ class WorkflowExecutor:
             local_vars: dict[str, Any] = {
                 "__builtins__": safe_builtins,
                 "context": context_values,
+                "output_dir": output_dir,
+                "save_file": _save_file,
+                "download_file": _download_file,
+                "save_json": _save_json,
+                "json_dumps": json.dumps,
+                "json_loads": json.loads,
+                "os_path_join": os.path.join,
             }
             exec(code, local_vars)
             output = local_vars.get("result", local_vars.get("output"))
@@ -1004,6 +1112,23 @@ class WorkflowExecutor:
                     extracted_data=action.action_params.get("data"),
                     is_complete=True,
                 )
+
+            elif action.action_type == "download":
+                url = action.action_params.get("url", "")
+                filename = action.action_params.get("filename", "")
+                subdir = action.action_params.get("subdir", "")
+                if url and filename:
+                    data_dir = os.environ.get("CLOAKBROWSER_DATA_DIR", "/data")
+                    out_dir = os.path.join(data_dir, "workflow_outputs", subdir) if subdir else os.path.join(data_dir, "workflow_outputs")
+                    os.makedirs(out_dir, exist_ok=True)
+                    safe_name = "".join(c if c.isalnum() or c in "._- " else "_" for c in filename)
+                    filepath = os.path.join(out_dir, safe_name)
+                    urllib.request.urlretrieve(url, filepath)
+                    return AgentStepResult(
+                        success=True,
+                        action=action,
+                        extracted_data={"downloaded": filepath, "url": url, "filename": safe_name},
+                    )
 
             else:
                 logger.warning("Unknown action type: %s", action.action_type)

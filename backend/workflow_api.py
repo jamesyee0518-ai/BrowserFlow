@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import uuid
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
 
 from . import database as db
 from .models import (
@@ -35,6 +38,11 @@ def _get_executor() -> WorkflowExecutor:
     return _executor
 
 
+def _get_output_dir() -> Path:
+    data_dir = os.environ.get("CLOAKBROWSER_DATA_DIR", "/data")
+    return Path(data_dir) / "workflow_outputs"
+
+
 @router.get("", response_model=list[WorkflowResponse])
 async def list_workflows():
     return db.list_workflows()
@@ -57,6 +65,55 @@ async def create_workflow(req: WorkflowCreate):
         schedule=req.schedule,
     )
     return workflow
+
+
+@router.get("/runs", response_model=list[WorkflowRunResponse])
+async def list_workflow_runs(limit: int = 50, offset: int = 0):
+    return db.list_workflow_runs(limit=limit, offset=offset)
+
+
+@router.get("/runs/{run_id}", response_model=WorkflowRunResponse)
+async def get_workflow_run(run_id: str):
+    run = db.get_workflow_run(run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="Workflow run not found")
+    return run
+
+
+@router.get("/outputs")
+async def list_output_files(subdir: str = ""):
+    out_dir = _get_output_dir()
+    if subdir:
+        out_dir = out_dir / subdir
+    if not out_dir.exists():
+        return {"files": [], "total": 0}
+    files = []
+    for f in sorted(out_dir.rglob("*")):
+        if f.is_file():
+            rel = f.relative_to(_get_output_dir())
+            stat = f.stat()
+            files.append({
+                "path": str(rel),
+                "name": f.name,
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+            })
+    return {"files": files, "total": len(files)}
+
+
+@router.get("/outputs/download/{file_path:path}")
+async def download_output_file(file_path: str):
+    out_dir = _get_output_dir()
+    full_path = (out_dir / file_path).resolve()
+    if not str(full_path).startswith(str(out_dir.resolve())):
+        raise HTTPException(status_code=403, detail="Access denied")
+    if not full_path.exists() or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(
+        path=str(full_path),
+        filename=full_path.name,
+        media_type="application/octet-stream",
+    )
 
 
 @router.get("/{workflow_id}", response_model=WorkflowResponse)
@@ -162,14 +219,23 @@ async def run_workflow(workflow_id: str, req: WorkflowRunCreate | None = None):
     )
 
 
-@router.get("/runs", response_model=list[WorkflowRunResponse])
-async def list_workflow_runs(limit: int = 50, offset: int = 0):
-    return db.list_workflow_runs(limit=limit, offset=offset)
-
-
-@router.get("/runs/{run_id}", response_model=WorkflowRunResponse)
-async def get_workflow_run(run_id: str):
-    run = db.get_workflow_run(run_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Workflow run not found")
-    return run
+@router.get("/{workflow_id}/outputs")
+async def list_workflow_output_files(workflow_id: str):
+    workflow = db.get_workflow(workflow_id)
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+    out_dir = _get_output_dir() / workflow_id
+    if not out_dir.exists():
+        return {"files": [], "total": 0, "workflow_id": workflow_id}
+    files = []
+    for f in sorted(out_dir.rglob("*")):
+        if f.is_file():
+            rel = f.relative_to(out_dir)
+            stat = f.stat()
+            files.append({
+                "path": str(rel),
+                "name": f.name,
+                "size": stat.st_size,
+                "modified": stat.st_mtime,
+            })
+    return {"files": files, "total": len(files), "workflow_id": workflow_id}
