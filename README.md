@@ -1,6 +1,3 @@
-<p align="center">
-<img src="https://i.imgur.com/cqkp6fG.png" width="500" alt="BrowserFlow">
-</p>
 
 <h3 align="center">BrowserFlow — Anti-Detect Browser Manager + Workflow Automation</h3>
 
