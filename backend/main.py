@@ -389,7 +389,6 @@ async def lifespan(app: FastAPI):
 
     db.init_db()
     await browser_mgr.cleanup_stale()
-    browser_mgr._auto_launch_task = asyncio.create_task(browser_mgr.auto_launch_all())
 
     from .skyvern_adapter import register_cloakbrowser_types
     register_cloakbrowser_types()
@@ -400,16 +399,22 @@ async def lifespan(app: FastAPI):
     logger.info("CloakBrowser Manager started")
     yield
     logger.info("Shutting down — stopping all browsers...")
-    if _memory_guard:
-        _memory_guard.stop()
-    if browser_mgr._auto_launch_task and not browser_mgr._auto_launch_task.done():
+
+    if getattr(browser_mgr, '_auto_launch_task', None) and not browser_mgr._auto_launch_task.done():
         browser_mgr._auto_launch_task.cancel()
         await asyncio.gather(browser_mgr._auto_launch_task, return_exceptions=True)
+    if _memory_guard:
+        _memory_guard.stop()
     await browser_mgr.cleanup_all()
 
 
 app = FastAPI(title="CloakBrowser Manager", lifespan=lifespan)
 app.add_middleware(AuthMiddleware)
+
+
+@app.on_event("startup")
+async def _delayed_auto_launch():
+    browser_mgr._auto_launch_task = asyncio.create_task(browser_mgr.auto_launch_all())
 
 
 # ── Workflow API ──────────────────────────────────────────────────────────────

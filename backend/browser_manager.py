@@ -176,6 +176,16 @@ class BrowserManager:
                 raise RuntimeError(f"Profile {profile_id} is already running")
             self._launching.add(profile_id)
 
+        try:
+            from cloakbrowser.download import ensure_binary
+            binary_path = await asyncio.to_thread(ensure_binary)
+            logger.info("Using CloakBrowser binary: %s", binary_path)
+        except Exception as e:
+            async with self._lock:
+                self._launching.discard(profile_id)
+            logger.error("Failed to ensure CloakBrowser binary: %s", e)
+            raise RuntimeError(f"CloakBrowser binary not available: {e}") from e
+
         if _LOCAL_DEV_MODE:
             display = 0
             ws_port = 0
