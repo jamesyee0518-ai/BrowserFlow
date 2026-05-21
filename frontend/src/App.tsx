@@ -261,7 +261,11 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
                 if (selectedWorkflow) {
                   return await updateWorkflow(selectedWorkflow.id, data);
                 } else {
-                  return await createWorkflow(data);
+                  const created = await createWorkflow(data);
+                  if (created) {
+                    setSelectedWorkflowId(created.id);
+                  }
+                  return created;
                 }
               }}
               onRun={async (id) => {
