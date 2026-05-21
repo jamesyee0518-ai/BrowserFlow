@@ -85,44 +85,6 @@ class MemoryGuard:
 
     def _get_process_memory_mb(self, running: Any) -> float | None:
         try:
-            context = running.context
-            browser = getattr(context, "browser", None)
-            if browser is None:
-                return None
-
-            proc = getattr(browser, "_impl_obj", None)
-            if proc is None:
-                proc = getattr(browser, "_process", None)
-            if proc is None:
-                try:
-                    pages = context.pages
-                    if pages:
-                        page = pages[0]
-                        cdp_session = None
-                        try:
-                            cdp_session = await asyncio.wait_for(
-                                page.context.new_cdp_session(page),
-                                timeout=3,
-                            )
-                            result = await asyncio.wait_for(
-                                cdp_session.send("Performance.getMetrics"),
-                                timeout=3,
-                            )
-                            for metric in result.get("metrics", []):
-                                if metric.get("name") == "JSHeapUsedSize":
-                                    return metric["value"] / (1024 * 1024)
-                        except Exception:
-                            pass
-                        finally:
-                            if cdp_session:
-                                try:
-                                    await cdp_session.detach()
-                                except Exception:
-                                    pass
-                except Exception:
-                    pass
-                return self._get_process_memory_from_os(running)
-
             return self._get_process_memory_from_os(running)
         except Exception as e:
             logger.debug("Failed to get memory for profile: %s", e)
