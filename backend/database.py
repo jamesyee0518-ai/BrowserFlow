@@ -389,6 +389,8 @@ def get_workflow_run(run_id: str) -> dict[str, Any] | None:
         for json_field in ("parameters", "output"):
             if run.get(json_field):
                 run[json_field] = json.loads(run[json_field])
+        if "id" in run and "workflow_run_id" not in run:
+            run["workflow_run_id"] = run["id"]
         return run
 
 
@@ -437,5 +439,7 @@ def list_workflow_runs(limit: int = 50, offset: int = 0) -> list[dict[str, Any]]
             for json_field in ("parameters", "output"):
                 if run.get(json_field):
                     run[json_field] = json.loads(run[json_field])
+            if "id" in run and "workflow_run_id" not in run:
+                run["workflow_run_id"] = run["id"]
             runs.append(run)
         return runs

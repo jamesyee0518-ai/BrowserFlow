@@ -196,7 +196,10 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
                 selectedId={selectedWorkflowId}
                 onSelect={(id) => { setSelectedWorkflowId(id); setWorkflowView("edit"); }}
                 onNew={() => { setSelectedWorkflowId(null); setWorkflowView("edit"); }}
-                onRun={(id) => runWorkflow(id)}
+                onRun={async (id) => {
+                  const result = await runWorkflow(id);
+                  if (result) setSelectedRun(result);
+                }}
                 onDelete={(id) => removeWorkflow(id)}
               />
             )}
@@ -270,6 +273,9 @@ function AppContent({ authRequired, onLogout }: AppContentProps) {
               }}
               onRun={async (id) => {
                 const result = await runWorkflow(id);
+                if (result) {
+                  setSelectedRun(result);
+                }
                 return result;
               }}
               onCancel={() => { setSelectedWorkflowId(null); setWorkflowView("list"); }}
