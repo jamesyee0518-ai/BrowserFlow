@@ -1,4 +1,4 @@
-# CloakBrowser-Manager × Skyvern 融合架构规划
+# BrowserFlow项目架构规划
 
 > 版本: 1.1
 > 日期: 2026-05-21
